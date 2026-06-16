@@ -1,0 +1,37 @@
+---
+namespace: hashicorp
+name: vault
+version: 1.0.0
+readme: README.md
+
+authors:
+  - HashiCorp Vault Plugin Team
+
+description: Event-Driven Ansible plugin for HashiCorp Vault WebSocket events
+
+license:
+  - Apache-2.0
+
+tags:
+  - vault
+  - hashicorp
+  - events
+  - websocket
+  - eda
+  - event_driven_ansible
+
+repository: https://github.com/your-org/vault-plugin
+documentation: https://github.com/your-org/vault-plugin/blob/main/README.md
+homepage: https://github.com/your-org/vault-plugin
+issues: https://github.com/your-org/vault-plugin/issues
+
+build_ignore:
+  - .git
+  - .gitignore
+  - .DS_Store
+  - '*.pyc'
+  - '*.swp'
+  - __pycache__
+  - .pytest_cache
+  - .vscode
+  - .idea

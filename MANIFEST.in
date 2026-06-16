@@ -1,0 +1,17 @@
+# Include documentation
+include README.md
+include LICENSE
+
+# Include requirements
+include requirements.txt
+
+# Include collection metadata
+include galaxy.yml
+
+# Include examples
+recursive-include docs *.yml *.yaml *.md
+
+# Exclude build artifacts
+global-exclude *.pyc
+global-exclude *.pyo
+global-exclude __pycache__

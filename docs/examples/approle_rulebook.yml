@@ -1,0 +1,81 @@
+---
+# AppRole authentication example for HashiCorp Vault events
+#
+# This rulebook demonstrates using AppRole authentication instead of direct tokens.
+# It subscribes to KV and audit events and triggers different actions based on event type.
+#
+# Usage:
+#   export VAULT_ROLE_ID="your-role-id"
+#   export VAULT_SECRET_ID="your-secret-id"
+#   ansible-rulebook -i inventory.yml --rulebook approle_rulebook.yml
+
+- name: Vault Events with AppRole Authentication
+  hosts: all
+  sources:
+    - hashicorp.vault.vault_events:
+        vault_url: "https://vault.example.com:8200"
+        approle_role_id: "{{ VAULT_ROLE_ID }}"
+        approle_secret_id: "{{ VAULT_SECRET_ID }}"
+        event_types:
+          - "kv-v2/*"
+          - "audit/*"
+        verify_ssl: true
+        reconnect_enabled: true
+        reconnect_max_attempts: 10
+        reconnect_initial_delay: 2
+        reconnect_max_delay: 120
+
+  rules:
+    # Handle KV-v2 data writes
+    - name: Process KV secret write
+      condition: event.vault.event_type == "kv-v2/data-write"
+      action:
+        run_playbook:
+          name: handle_secret_write.yml
+          extra_vars:
+            secret_path: "{{ event.vault.metadata.path }}"
+            operation: "{{ event.vault.metadata.operation }}"
+            mount_path: "{{ event.vault.plugin_info.mount_path }}"
+
+    # Handle KV-v2 data deletes
+    - name: Process KV secret delete
+      condition: event.vault.event_type == "kv-v2/data-delete"
+      action:
+        run_playbook:
+          name: handle_secret_delete.yml
+          extra_vars:
+            secret_path: "{{ event.vault.metadata.path }}"
+
+    # Handle KV-v2 metadata operations
+    - name: Process KV metadata changes
+      condition: event.vault.event_type is match("kv-v2/metadata-.*")
+      action:
+        debug:
+          msg: "Metadata operation: {{ event.vault.event_type }} on {{ event.vault.metadata.path }}"
+
+    # Handle audit events with high severity
+    - name: Alert on critical audit events
+      condition: >
+        event.vault.event_type is match("audit/.*") and
+        event.vault.metadata.severity | default('info') == 'critical'
+      action:
+        run_playbook:
+          name: handle_critical_audit.yml
+          extra_vars:
+            audit_event: "{{ event.vault }}"
+
+    # General audit event logging
+    - name: Log audit events
+      condition: event.vault.event_type is match("audit/.*")
+      action:
+        debug:
+          msg: |
+            Audit Event: {{ event.vault.event_type }}
+            Metadata: {{ event.vault.metadata }}
+
+    # Catch-all for unhandled events
+    - name: Log unhandled events
+      condition: event.vault is defined
+      action:
+        debug:
+          msg: "Unhandled event type: {{ event.vault.event_type }}"
