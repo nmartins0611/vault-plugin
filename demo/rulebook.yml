@@ -1,0 +1,20 @@
+---
+- name: Vault secret-change demo against vault.nostromo.io
+  hosts: localhost
+  sources:
+    - vault_audit:
+        ssh_host: vault.nostromo.io
+        ssh_user: root
+        audit_path: /opt/vault/logs/audit.json
+
+  rules:
+    - name: Record KV writes and deletes
+      condition: event.vault.path is match("secret/(data|delete)/eda-demo/.*")
+      action:
+        run_playbook:
+          name: /demo/playbooks/record_secret_change.yml
+          extra_vars:
+            secret_path: "{{ event.vault.path }}"
+            operation: "{{ event.vault.operation }}"
+            event_time: "{{ event.audit.time }}"
+            receipt_path: "{{ DEMO_RECEIPT }}"
