@@ -256,6 +256,14 @@ cloudevents:
 
 ## Running the Plugin
 
+### Demo Scenario
+
+A complete working demo of this plugin concept (adapted for Community Edition Vault using file audit logs instead of the Enterprise-only Events API) is available in the `demo/` directory.
+
+The demo simulates rotating a database password across an application server (`rhel01`) and a database server (`rhel03`) when a secret is updated in Vault.
+
+See the [Demo README](demo/README.md) for full instructions on setting up and running the demo.
+
 ### Start ansible-rulebook
 
 ```bash

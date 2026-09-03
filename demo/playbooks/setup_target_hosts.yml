@@ -1,0 +1,60 @@
+---
+- name: Setup Application on rhel01
+  hosts: rhel01.nostromo.io
+  become: true
+  tasks:
+    - name: Create app directory
+      ansible.builtin.file:
+        path: /etc/myapp
+        state: directory
+        mode: '0755'
+
+    - name: Create mock application configuration
+      ansible.builtin.copy:
+        dest: /etc/myapp/config.ini
+        mode: '0640'
+        content: |
+          [database]
+          host = rhel03.nostromo.io
+          port = 5432
+          user = appuser
+          password = initial_password
+          dbname = appdb
+
+- name: Setup Database on rhel03
+  hosts: rhel03.nostromo.io
+  become: true
+  tasks:
+    - name: Install PostgreSQL server
+      ansible.builtin.dnf:
+        name: postgresql-server
+        state: present
+
+    - name: Check if PostgreSQL is initialized
+      ansible.builtin.stat:
+        path: /var/lib/pgsql/data/PG_VERSION
+      register: pg_version
+
+    - name: Initialize PostgreSQL database
+      ansible.builtin.command: postgresql-setup --initdb
+      when: not pg_version.stat.exists
+
+    - name: Start and enable PostgreSQL service
+      ansible.builtin.systemd:
+        name: postgresql
+        state: started
+        enabled: true
+
+    - name: Create appuser role
+      ansible.builtin.command: >
+        psql -c "CREATE ROLE appuser WITH LOGIN PASSWORD 'initial_password';"
+      become_user: postgres
+      register: create_user
+      failed_when: create_user.rc != 0 and 'already exists' not in create_user.stderr
+
+    - name: Create appdb database
+      ansible.builtin.command: >
+        createdb -O appuser appdb
+      become_user: postgres
+      register: create_db
+      failed_when: create_db.rc != 0 and 'already exists' not in create_db.stderr

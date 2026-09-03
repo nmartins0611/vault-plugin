@@ -76,17 +76,21 @@ def main() -> None:
     token = require_env("VAULT_TOKEN")
 
     if parsed.action == "write":
+        import secrets
+        import string
+        alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
+        password = ''.join(secrets.choice(alphabet) for i in range(16))
         stamp = str(int(time.time()))
         status, body = vault_request(
             addr,
             "POST",
             f"/v1/{SECRET_PATH}",
             token,
-            {"data": {"rotated_at": stamp, "source": "eda-demo"}},
+            {"data": {"password": password, "rotated_at": stamp, "source": "eda-demo"}},
         )
         if status not in (200, 204):
             raise RuntimeError(f"Secret write failed ({status}): {body}")
-        print(f"Wrote {SECRET_PATH} rotated_at={stamp}")
+        print(f"Wrote {SECRET_PATH} rotated_at={stamp} password=***")
         return
 
     status, body = vault_request(addr, "DELETE", f"/v1/{SECRET_PATH}", token, None)

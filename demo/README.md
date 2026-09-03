@@ -1,53 +1,46 @@
-# Vault + EDA demo (vault.nostromo.io)
+# Vault + EDA Demo (vault.nostromo.io)
 
-This demo reacts to secret writes on the homelab Vault at `http://vault.nostromo.io:8200`.
+This demo reacts to secret writes on the homelab Vault at `http://vault.nostromo.io:8200` and automatically rotates passwords across an application server and a database.
 
-That Vault is Community / OpenBao 2.0.4. The Events WebSocket API (`/v1/sys/events/subscribe/...`) is Enterprise-only and returns `unsupported path` here. The demo therefore uses a **file audit device** on the Vault host and tails it over SSH into ansible-rulebook.
+That Vault is Community / OpenBao 2.0.4. The Events WebSocket API (`/v1/sys/events/subscribe/...`) is Enterprise-only. The demo therefore uses a **file audit device** on the Vault host and tails it over SSH into `ansible-rulebook`.
+
+## Topology
+
+* **`vault.nostromo.io`**: HashiCorp Vault (OpenBao) instance generating events via file audit.
+* **`aap.nostromo.io`**: Ansible Automation Platform running the EDA rulebook (`ansible-rulebook`) as a service.
+* **`rhel01.nostromo.io`**: Mock application server that reads configuration from `/etc/myapp/config.ini`.
+* **`rhel03.nostromo.io`**: Database server running PostgreSQL.
 
 ```
-vault kv put secret/eda-demo/app ...
+vault kv put secret/eda-demo/app (Password rotation)
         -> file audit on vault.nostromo.io
         -> ssh tail -F /opt/vault/logs/audit.json
-        -> ansible-rulebook
-        -> demo/out/secret-change.json
+        -> ansible-rulebook (aap.nostromo.io)
+        -> run update_passwords.yml
+        -> ssh to rhel01 (Updates config.ini)
+        -> ssh to rhel03 (Updates PostgreSQL appuser)
 ```
 
 ## Prerequisites
 
-- `ansible-rulebook` and Java (already needed by EDA)
-- SSH as `root@vault.nostromo.io` with a key (BatchMode)
-- Vault root token and unseal key in `demo/.env` (not committed)
+- SSH as `root@vault.nostromo.io` with a key (BatchMode).
+- Vault root token and unseal key in `demo/.env` (not committed).
+- The AAP host must be configured with SSH keys to connect to `rhel01` and `rhel03`.
 
-## Setup
+## Setup Target Hosts
 
-```bash
-cp demo/.env.example demo/.env
-# fill VAULT_TOKEN and VAULT_UNSEAL_KEY
-chmod 600 demo/.env
-```
-
-## Run
+Before running the demo, ensure the target hosts (`rhel01`, `rhel03`) are provisioned:
 
 ```bash
-./demo/scripts/run_demo.sh
+cd demo
+ansible-playbook -i inventory.yml playbooks/setup_target_hosts.yml
 ```
 
-That script unseals Vault if needed, enables the file audit device, starts the rulebook, writes `secret/eda-demo/app`, and waits for `demo/out/secret-change.json`.
+## Running the Demo
 
-Manual pieces:
+The EDA rulebook runs as a systemd user service (`vault-eda-demo`) under the `srvadmin` user on `aap.nostromo.io`.
 
-```bash
-python3 demo/scripts/prepare_vault.py
-ansible-rulebook -i demo/inventory.yml -r demo/rulebook.yml -S demo/plugins --print-events -vv
-# in another terminal:
-python3 demo/scripts/trigger_secret.py write
-```
-
-## On aap.nostromo.io
-
-The demo runs as user service `vault-eda-demo` on the AAP host (ansible-rulebook in the AAP 2.7 decision environment image). It is not a Gateway EDA activation.
-
-**Terminal 1 — watch events:**
+### Terminal 1 — Watch EDA Logs on AAP
 
 ```bash
 ssh srvadmin@aap.nostromo.io
@@ -55,25 +48,28 @@ export XDG_RUNTIME_DIR=/run/user/1000
 podman logs -f vault-eda-demo
 ```
 
-**Terminal 2 — generate events (from your laptop):**
+### Terminal 2 — Trigger Password Rotation (Local)
+
+From your laptop, trigger a password rotation in Vault. The script generates a random 16-character password and saves it to Vault.
 
 ```bash
 cd /home/nmartins/Development/AI-Assisted/vault-plugin
 python3 demo/scripts/trigger_secret.py write
-python3 demo/scripts/trigger_secret.py delete
 ```
 
-Receipt on AAP: `/home/srvadmin/vault-eda-demo/out/secret-change.json`
+### 3. Verify Updates
 
-Service control:
+Watch the `podman logs` in Terminal 1. You should see the event being received and the `update_passwords.yml` playbook being executed.
+
+Verify the changes on the target systems:
+
+* **rhel01**: `ssh root@rhel01.nostromo.io cat /etc/myapp/config.ini` (Check the new password)
+* **rhel03**: The database password for `appuser` will be updated (use `psql` to verify login if desired).
+
+Service control on AAP:
 
 ```bash
 ssh srvadmin@aap.nostromo.io
 export XDG_RUNTIME_DIR=/run/user/1000
-systemctl --user status vault-eda-demo
 systemctl --user restart vault-eda-demo
 ```
-
-## Why not `hashicorp.vault.vault_events`?
-
-That plugin is correct for Vault Enterprise / HCP. This lab Vault is community and has no Events API. Do not point the WebSocket plugin at `vault.nostromo.io` and expect it to connect.
