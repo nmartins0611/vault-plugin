@@ -258,11 +258,9 @@ cloudevents:
 
 ### Demo Scenario
 
-A complete working demo of this plugin concept (adapted for Community Edition Vault using file audit logs instead of the Enterprise-only Events API) is available in the `demo/` directory.
+A complete working demo is in `demo/` and `rulebooks/vault_secret_change.yml`. On AAP it uses a Controller job template plus an EDA rulebook activation (file audit source, because this lab Vault is Community Edition).
 
-The demo simulates rotating a database password across an application server (`rhel01`) and a database server (`rhel03`) when a secret is updated in Vault.
-
-See the [Demo README](demo/README.md) for full instructions on setting up and running the demo.
+See [demo/README.md](demo/README.md) for UI objects and how to trigger a rotation.
 
 ### Start ansible-rulebook
 

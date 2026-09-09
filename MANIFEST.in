@@ -8,6 +8,9 @@ include requirements.txt
 # Include collection metadata
 include galaxy.yml
 
+# Include EDA event source plugins
+recursive-include extensions *.py *.yml *.yaml *.md
+
 # Include examples
 recursive-include docs *.yml *.yaml *.md
 

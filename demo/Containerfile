@@ -1,0 +1,5 @@
+FROM localhost/vault-eda-demo:latest
+USER root
+COPY hashicorp-vault-1.0.0.tar.gz /tmp/hashicorp-vault.tar.gz
+RUN ansible-galaxy collection install /tmp/hashicorp-vault.tar.gz -p /usr/share/ansible/collections \
+    && rm -f /tmp/hashicorp-vault.tar.gz
