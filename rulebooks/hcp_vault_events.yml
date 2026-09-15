@@ -32,18 +32,6 @@
         reconnect_max_delay: 60
 
   rules:
-    - name: Log KV-v2 events
-      condition: event.vault.event_type is match("kv-v2/.*")
-      action:
-        debug:
-          msg: |
-            Vault event:
-              type: {{ event.vault.event_type }}
-              path: {{ event.vault.metadata.path | default('N/A') }}
-              operation: {{ event.vault.metadata.operation | default('N/A') }}
-              mount: {{ event.vault.plugin_info.mount_path | default('N/A') }}
-              id: {{ event.cloudevents.id }}
-              time: {{ event.cloudevents.time }}
 
     - name: Rotate app and database passwords
       condition: >
@@ -58,3 +46,17 @@
               secret_path: "{{ event.vault.metadata.path }}"
               operation: "{{ event.vault.metadata.operation }}"
               event_time: "{{ event.cloudevents.time }}"
+
+
+    - name: Log KV-v2 events
+      condition: event.vault.event_type is match("kv-v2/.*")
+      action:
+        debug:
+          msg: |
+            Vault event:
+              type: {{ event.vault.event_type }}
+              path: {{ event.vault.metadata.path | default('N/A') }}
+              operation: {{ event.vault.metadata.operation | default('N/A') }}
+              mount: {{ event.vault.plugin_info.mount_path | default('N/A') }}
+              id: {{ event.cloudevents.id }}
+              time: {{ event.cloudevents.time }}              
