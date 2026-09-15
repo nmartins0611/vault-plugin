@@ -1,5 +1,6 @@
-FROM localhost/vault-eda-demo:latest
+FROM aap-neuromancer.demoredhat.com/de-supported-rhel9:latest
 USER root
 COPY hashicorp-vault-1.0.0.tar.gz /tmp/hashicorp-vault.tar.gz
-RUN ansible-galaxy collection install /tmp/hashicorp-vault.tar.gz -p /usr/share/ansible/collections \
+RUN python3 -m pip install --no-cache-dir "websockets>=12.0" "aiohttp>=3.9.0" \
+    && ansible-galaxy collection install /tmp/hashicorp-vault.tar.gz -p /usr/share/ansible/collections \
     && rm -f /tmp/hashicorp-vault.tar.gz

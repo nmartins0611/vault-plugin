@@ -63,3 +63,12 @@ python3 demo/scripts/trigger_secret.py write
 ```bash
 ssh root@rhel01.nostromo.io cat /etc/myapp/config.ini
 ```
+
+## Burger counter app
+
+`rhel01` serves a small web app at **http://rhel01.nostromo.io:8080**. Each page load re-reads `/etc/myapp/config.ini`, so a Vault-triggered password rotation is picked up without restarting the app. Counts are stored in PostgreSQL table `burger_log` on `rhel03`.
+
+```bash
+cd demo
+ansible-playbook -i inventory.yml playbooks/deploy_burger_app.yml
+```

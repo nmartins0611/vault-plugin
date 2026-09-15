@@ -1,0 +1,60 @@
+---
+# HCP Vault Dedicated -> Event-Driven Ansible
+#
+# Extra vars (AAP activation extra vars, or -E locally):
+#   VAULT_ADDR   e.g. https://cloud-content-public.z1.hashicorp.cloud:8200
+#   VAULT_TOKEN  token with events subscribe ACL
+#
+# Token auth (quick test):
+#   export VAULT_ADDR="https://cloud-content-public.z1.hashicorp.cloud:8200"
+#   export VAULT_TOKEN="hvs.xxxxx"
+#   ansible-rulebook -i docs/examples/inventory.yml \
+#     --rulebook rulebooks/hcp_vault_events.yml \
+#     -E VAULT_ADDR,VAULT_TOKEN
+#
+# On AAP, pass VAULT_ADDR and VAULT_TOKEN as activation extra vars.
+# Allowlist the EDA worker egress IPs on the HCP cluster if public access is restricted.
+
+- name: HCP Vault Dedicated events
+  hosts: all
+  sources:
+    - hashicorp.vault.vault_events:
+        vault_url: "{{ VAULT_ADDR }}"
+        vault_namespace: "admin"
+        vault_token: "{{ VAULT_TOKEN }}"
+        event_types:
+          - "kv-v2/data-write"
+          - "kv-v2/data-delete"
+        verify_ssl: true
+        reconnect_enabled: true
+        reconnect_max_attempts: -1
+        reconnect_initial_delay: 2
+        reconnect_max_delay: 60
+
+  rules:
+    - name: Log KV-v2 events
+      condition: event.vault.event_type is match("kv-v2/.*")
+      action:
+        debug:
+          msg: |
+            Vault event:
+              type: {{ event.vault.event_type }}
+              path: {{ event.vault.metadata.path | default('N/A') }}
+              operation: {{ event.vault.metadata.operation | default('N/A') }}
+              mount: {{ event.vault.plugin_info.mount_path | default('N/A') }}
+              id: {{ event.cloudevents.id }}
+              time: {{ event.cloudevents.time }}
+
+    - name: Rotate app and database passwords
+      condition: >
+        event.vault.event_type == "kv-v2/data-write"
+        and event.vault.metadata.path is match("secret/data/eda-demo/.*")
+      action:
+        run_job_template:
+          name: Vault rotate app and db passwords
+          organization: Default
+          job_args:
+            extra_vars:
+              secret_path: "{{ event.vault.metadata.path }}"
+              operation: "{{ event.vault.metadata.operation }}"
+              event_time: "{{ event.cloudevents.time }}"

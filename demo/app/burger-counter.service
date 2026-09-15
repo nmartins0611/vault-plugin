@@ -1,0 +1,16 @@
+[Unit]
+Description=Nostromo burger counter
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=myapp
+Group=myapp
+WorkingDirectory=/opt/myapp
+ExecStart=/usr/bin/python3 /opt/myapp/burger_counter.py
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,177 @@
+---
+- name: Gather facts from the application host
+  hosts: app
+  become: true
+  tasks:
+    - name: Collect network facts
+      ansible.builtin.setup:
+        gather_subset:
+          - network
+
+- name: Open PostgreSQL for the burger app
+  hosts: db
+  become: true
+  vars:
+    app_inventory_host: "{{ groups['app'][0] }}"
+    app_client_ip: "{{ hostvars[app_inventory_host]['ansible_facts']['default_ipv4']['address'] }}"
+  tasks:
+    - name: Listen for remote PostgreSQL clients
+      ansible.builtin.lineinfile:
+        path: /var/lib/pgsql/data/postgresql.conf
+        regexp: "^#?listen_addresses\\s*="
+        line: "listen_addresses = '*'"
+      notify: Restart PostgreSQL
+
+    - name: Read cluster password encryption
+      ansible.builtin.command:
+        argv:
+          - su
+          - "-"
+          - postgres
+          - -c
+          - psql -tAc "SHOW password_encryption;"
+      register: pg_password_encryption
+      changed_when: false
+
+    - name: Allow appuser from the application host
+      ansible.builtin.lineinfile:
+        path: /var/lib/pgsql/data/pg_hba.conf
+        regexp: "^host\\s+appdb\\s+appuser\\s+{{ app_client_ip | regex_escape }}/32\\s+"
+        line: "host    appdb    appuser    {{ app_client_ip }}/32    {{ pg_password_encryption.stdout | trim }}"
+      notify: Restart PostgreSQL
+
+    - name: Flush PostgreSQL handlers before schema changes
+      ansible.builtin.meta: flush_handlers
+
+    - name: Create burger_log table
+      ansible.builtin.command:
+        argv:
+          - su
+          - "-"
+          - postgres
+          - -c
+          - psql -d appdb -c "CREATE TABLE IF NOT EXISTS burger_log (id serial PRIMARY KEY, eaten_at timestamptz NOT NULL DEFAULT now());"
+      changed_when: true
+
+    - name: Grant table access to appuser
+      ansible.builtin.command:
+        argv:
+          - su
+          - "-"
+          - postgres
+          - -c
+          - psql -d appdb -c "GRANT ALL ON TABLE burger_log TO appuser;"
+      changed_when: true
+
+    - name: Grant sequence access to appuser
+      ansible.builtin.command:
+        argv:
+          - su
+          - "-"
+          - postgres
+          - -c
+          - psql -d appdb -c "GRANT USAGE, SELECT ON SEQUENCE burger_log_id_seq TO appuser;"
+      changed_when: true
+
+    - name: Allow PostgreSQL from the application host through firewalld
+      ansible.builtin.command:
+        argv:
+          - firewall-cmd
+          - --permanent
+          - --add-rich-rule=rule family=ipv4 source address={{ app_client_ip }}/32 port protocol=tcp port=5432 accept
+      register: pg_firewall
+      changed_when: "'ALREADY_ENABLED' not in pg_firewall.stdout"
+      failed_when: pg_firewall.rc != 0 and 'ALREADY_ENABLED' not in pg_firewall.stdout
+
+    - name: Reload firewalld on the database host
+      ansible.builtin.command:
+        argv:
+          - firewall-cmd
+          - --reload
+      when: pg_firewall.changed
+
+  handlers:
+    - name: Restart PostgreSQL
+      ansible.builtin.systemd:
+        name: postgresql
+        state: restarted
+
+- name: Deploy burger counter on the application host
+  hosts: app
+  become: true
+  tasks:
+    - name: Install Python PostgreSQL client library
+      ansible.builtin.dnf:
+        name: python3-psycopg2
+        state: present
+
+    - name: Create myapp system user
+      ansible.builtin.user:
+        name: myapp
+        system: true
+        shell: /sbin/nologin
+        home: /opt/myapp
+        create_home: false
+
+    - name: Create application directory
+      ansible.builtin.file:
+        path: /opt/myapp
+        state: directory
+        owner: myapp
+        group: myapp
+        mode: "0755"
+
+    - name: Install burger counter
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../app/burger_counter.py"
+        dest: /opt/myapp/burger_counter.py
+        owner: myapp
+        group: myapp
+        mode: "0644"
+
+    - name: Let myapp read database settings
+      ansible.builtin.file:
+        path: /etc/myapp/config.ini
+        owner: root
+        group: myapp
+        mode: "0640"
+
+    - name: Install systemd unit
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../app/burger-counter.service"
+        dest: /etc/systemd/system/burger-counter.service
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Restart burger-counter
+
+    - name: Enable and start burger-counter
+      ansible.builtin.systemd:
+        name: burger-counter
+        enabled: true
+        state: started
+        daemon_reload: true
+
+    - name: Allow HTTP on port 8080
+      ansible.builtin.command:
+        argv:
+          - firewall-cmd
+          - --permanent
+          - --add-port=8080/tcp
+      register: app_firewall
+      changed_when: "'ALREADY_ENABLED' not in app_firewall.stdout"
+      failed_when: app_firewall.rc != 0 and 'ALREADY_ENABLED' not in app_firewall.stdout
+
+    - name: Reload firewalld on the application host
+      ansible.builtin.command:
+        argv:
+          - firewall-cmd
+          - --reload
+      when: app_firewall.changed
+
+  handlers:
+    - name: Restart burger-counter
+      ansible.builtin.systemd:
+        name: burger-counter
+        state: restarted
+        daemon_reload: true

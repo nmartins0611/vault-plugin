@@ -1,28 +1,32 @@
 ---
-- name: Setup Application on rhel01
-  hosts: rhel01.nostromo.io
+- name: Setup application host
+  hosts: app
   become: true
+  vars:
+    db_inventory_host: "{{ groups['db'][0] }}"
+    db_connect_host: "{{ hostvars[db_inventory_host]['ansible_host'] | default(db_inventory_host) }}"
   tasks:
     - name: Create app directory
       ansible.builtin.file:
         path: /etc/myapp
         state: directory
-        mode: '0755'
+        mode: "0755"
 
     - name: Create mock application configuration
       ansible.builtin.copy:
         dest: /etc/myapp/config.ini
-        mode: '0640'
+        mode: "0640"
+        force: false
         content: |
           [database]
-          host = rhel03.nostromo.io
+          host = {{ db_connect_host }}
           port = 5432
           user = appuser
           password = initial_password
           dbname = appdb
 
-- name: Setup Database on rhel03
-  hosts: rhel03.nostromo.io
+- name: Setup database host
+  hosts: db
   become: true
   tasks:
     - name: Install PostgreSQL server
