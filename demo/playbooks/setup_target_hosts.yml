@@ -50,15 +50,23 @@
         enabled: true
 
     - name: Create appuser role
-      ansible.builtin.command: >
-        psql -c "CREATE ROLE appuser WITH LOGIN PASSWORD 'initial_password';"
-      become_user: postgres
+      ansible.builtin.command:
+        argv:
+          - su
+          - "-"
+          - postgres
+          - -c
+          - "psql -c \"CREATE ROLE appuser WITH LOGIN PASSWORD 'initial_password';\""
       register: create_user
-      failed_when: create_user.rc != 0 and 'already exists' not in create_user.stderr
+      failed_when: create_user.rc != 0 and 'already exists' not in create_user.stderr and 'already exists' not in create_user.stdout
 
     - name: Create appdb database
-      ansible.builtin.command: >
-        createdb -O appuser appdb
-      become_user: postgres
+      ansible.builtin.command:
+        argv:
+          - su
+          - "-"
+          - postgres
+          - -c
+          - createdb -O appuser appdb
       register: create_db
-      failed_when: create_db.rc != 0 and 'already exists' not in create_db.stderr
+      failed_when: create_db.rc != 0 and 'already exists' not in create_db.stderr and 'already exists' not in create_db.stdout
