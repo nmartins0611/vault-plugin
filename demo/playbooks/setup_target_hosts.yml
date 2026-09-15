@@ -4,7 +4,7 @@
   become: true
   vars:
     db_inventory_host: "{{ groups['db'][0] }}"
-    db_connect_host: "{{ hostvars[db_inventory_host]['ansible_host'] | default(db_inventory_host) }}"
+    db_connect_host: "{{ '127.0.0.1' if groups['app'][0] == db_inventory_host else (hostvars[db_inventory_host]['ansible_host'] | default(db_inventory_host)) }}"
   tasks:
     - name: Create app directory
       ansible.builtin.file:
