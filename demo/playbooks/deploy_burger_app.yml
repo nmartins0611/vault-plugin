@@ -13,7 +13,7 @@
   become: true
   vars:
     app_inventory_host: "{{ groups['app'][0] }}"
-    app_client_ip: "{{ hostvars[app_inventory_host]['ansible_facts']['default_ipv4']['address'] }}"
+    app_client_ip: "{{ '127.0.0.1' if app_inventory_host == groups['db'][0] else hostvars[app_inventory_host]['ansible_facts']['default_ipv4']['address'] }}"
   tasks:
     - name: Listen for remote PostgreSQL clients
       ansible.builtin.lineinfile:
@@ -38,6 +38,7 @@
         path: /var/lib/pgsql/data/pg_hba.conf
         regexp: "^host\\s+appdb\\s+appuser\\s+{{ app_client_ip | regex_escape }}/32\\s+"
         line: "host    appdb    appuser    {{ app_client_ip }}/32    {{ pg_password_encryption.stdout | trim }}"
+        insertbefore: "^host\\s+all\\s+all\\s+127\\.0\\.0\\.1/32"
       notify: Restart PostgreSQL
 
     - name: Flush PostgreSQL handlers before schema changes

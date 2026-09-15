@@ -25,6 +25,12 @@
           password = initial_password
           dbname = appdb
 
+    - name: Point the app at the database host
+      ansible.builtin.lineinfile:
+        path: /etc/myapp/config.ini
+        regexp: '^host\s*='
+        line: "host = {{ db_connect_host }}"
+
 - name: Setup database host
   hosts: db
   become: true
